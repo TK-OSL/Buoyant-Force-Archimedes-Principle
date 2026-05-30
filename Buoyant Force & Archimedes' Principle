@@ -1,0 +1,1119 @@
+<!--
+  ====================================================================================================
+  Project: Interactive Physics Web App - Buoyant Force & Archimedes' Principle
+  Description: เว็บแอปพลิเคชันสื่อการสอน Interactive สำหรับวิชาฟิสิกส์ เรื่อง "แรงพยุงและหลักของอาร์คิมีดีส"
+               รองรับระบบ 2 ภาษา (English / Thai) มีแบบจำลอง 3 มิติแบบโต้ตอบได้ และโจทย์คำนวณแบบ Real-time
+  
+  Tech Stack:
+  - HTML5 / CSS3 / JavaScript (Vanilla)
+  - Tailwind CSS: สำหรับการจัดการ Layout และ Styling (ผ่าน CDN)
+  - MathJax: สำหรับแสดงผลสมการคณิตศาสตร์และฟิสิกส์ให้สวยงาม
+  - Three.js: สำหรับเรนเดอร์แบบจำลอง 3 มิติ (ถังน้ำ, วัตถุ, ตาชั่งสปริง)
+  
+  Guide สำหรับผู้พัฒนานำไปต่อยอด (How to extend):
+  1. การเพิ่ม/แก้ไขภาษา: ไปที่ <script> ค้นหาตัวแปร `translations` สามารถเพิ่ม Key หรือภาษาใหม่ได้เลย
+  2. การปรับแต่ง 3D (Three.js): ไปที่ฟังก์ชัน `init3D()` เพื่อแก้ไขแสง, เงา, สีของถังน้ำ หรือรูปร่างวัตถุ
+  3. การแก้ไขสูตรฟิสิกส์ 3D: ไปที่ฟังก์ชัน `updateSimulationMath()`
+  4. การเพิ่มโจทย์ตัวอย่าง: Copy HTML ของ Example 1/2 มาปรับแก้ และสร้างฟังก์ชัน `calculateEx3()` รองรับ
+  
+  Credits: OpenSimLab.org | Code generation assisted by Gemini
+  ====================================================================================================
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buoyant Force & Archimedes' Principle</title>
+    
+    <!-- นำเข้า Tailwind CSS สำหรับจัดสไตล์เว็บไซต์ -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- นำเข้า Google Fonts: ฟอนต์ Prompt เพื่อให้อ่านง่ายทั้งภาษาไทยและอังกฤษ -->
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- ตั้งค่าและนำเข้า MathJax สำหรับแสดงสมการฟิสิกส์ (เช่น LaTeX syntax) -->
+    <script>
+        window.MathJax = {
+            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <!-- นำเข้าไลบรารี Three.js สำหรับสร้าง 3D Simulation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- นำเข้า OrbitControls เพื่อให้ผู้ใช้หมุนและซูม 3D scene ได้ -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <!-- สไตล์ CSS เพิ่มเติมที่ไม่ได้ใช้ Tailwind -->
+    <style>
+        body {
+            font-family: 'Prompt', sans-serif;
+            background-color: #f0fdfa; /* สีพื้นหลังหลัก Tailwind teal-50 */
+            color: #0f172a; 
+        }
+        
+        /* สไตล์กล่องกระจก (Glassmorphism) สำหรับพื้นหลังคอนเทนต์ */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+        }
+        
+        /* ปุ่มสลับภาษา (Toggle Switch) */
+        .lang-toggle-container {
+            display: inline-flex;
+            background-color: #f1f5f9;
+            border-radius: 9999px;
+            padding: 4px;
+            cursor: pointer;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+            user-select: none;
+        }
+        .lang-btn {
+            padding: 4px 16px;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 700;
+            transition: all 0.3s ease;
+        }
+        .lang-btn.active {
+            background-color: white;
+            color: #f97316; /* orange-500 */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .lang-btn.inactive {
+            color: #64748b; /* slate-500 */
+            background-color: transparent;
+        }
+
+        /* สไตล์ช่องกรอกตัวเลขในโจทย์ ให้กลมกลืนกับข้อความ (Inline input) */
+        input[type=number].inline-input {
+            font-family: 'Prompt', sans-serif;
+            text-align: center;
+            font-weight: 600;
+            color: #ea580c; 
+            background-color: #fff7ed; 
+            border: 2px solid #fdba74; 
+            border-radius: 0.375rem;
+            padding: 0.1rem 0.25rem;
+            width: 5rem;
+            margin: 0 0.25rem;
+            transition: all 0.2s;
+            -moz-appearance: textfield;
+        }
+        input[type=number].inline-input:focus {
+            outline: none;
+            border-color: #ea580c; 
+            box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.3);
+        }
+        /* ซ่อนปุ่มลูกศรขึ้น/ลง ในกล่อง input number */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        
+        /* กล่องแสดงขั้นตอนการแก้โจทย์ */
+        .solution-step {
+            margin-bottom: 0.75rem;
+            padding: 1rem;
+            background-color: #f8fafc;
+            border-left: 4px solid #0ea5e9;
+            border-radius: 0.375rem;
+        }
+        .svg-illustration {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        /* ขนาดของพื้นที่แสดงผล 3D */
+        #canvas-container {
+            width: 100%;
+            height: 650px;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            background-color: #f1f5f9;
+            position: relative;
+            border: 1px solid #e2e8f0;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+        }
+    </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col">
+
+    <!-- ==================== ส่วนแถบนำทาง (Navbar) ==================== -->
+    <nav class="bg-white shadow-sm sticky top-0 z-50 border-b border-slate-200">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="text-xl font-bold text-sky-600 flex items-center gap-2">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                <span data-i18n="nav_title">Physics Lab</span>
+            </div>
+            
+            <!-- ปุ่มเปลี่ยนภาษา (Language Toggle) -->
+            <div class="lang-toggle-container" onclick="toggleLanguage()">
+                <div id="btn-en" class="lang-btn active">EN</div>
+                <div id="btn-th" class="lang-btn inactive">TH</div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ==================== เนื้อหาหลัก (Main Content) ==================== -->
+    <main class="flex-grow max-w-5xl mx-auto px-4 py-8 space-y-10 w-full">
+        
+        <!-- ส่วนหัวเรื่อง (Header) -->
+        <header class="text-center space-y-3">
+            <h1 class="text-3xl md:text-5xl font-bold text-slate-800" data-i18n="main_title">Buoyant Force & Archimedes' Principle</h1>
+            <p class="text-lg text-slate-600 max-w-3xl mx-auto" data-i18n="main_subtitle">Explore the physics of floating and sinking through interactive simulations and editable examples.</p>
+        </header>
+
+        <!-- ส่วนอธิบายทฤษฎี (Concept Section) -->
+        <section class="flex flex-col gap-8">
+            <!-- 1. ประวัติการค้นพบ (History) -->
+            <div class="glass-panel p-6 rounded-2xl">
+                <h2 class="text-2xl font-bold text-sky-700 mb-4 flex items-center gap-2">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                    <span data-i18n="history_title">The "Eureka!" Moment</span>
+                </h2>
+                <p class="text-slate-700 mb-4 leading-relaxed" data-i18n="history_p1">
+                    The story begins when Archimedes, an ancient Greek scholar, was tasked by King Hiero II of Syracuse to determine if a newly crafted golden crown had been adulterated with cheaper silver. The crucial condition was that Archimedes <strong>could not destroy, melt, or damage the crown in any way.</strong> This presented a significant challenge because the crown's irregular shape made calculating its volume by standard mathematics impossible.
+                </p>
+                <p class="text-slate-700 leading-relaxed" data-i18n="history_p2">
+                    One day, while pondering the problem, he stepped into a full bathtub. He noticed that <strong>"the volume of water that spilled over the edge was exactly equal to the volume of his body that was submerged."</strong> In a flash of insight, he realized he could measure the crown's volume by displacing water! If the crown contained silver (which is less dense than gold), it would have a larger volume than a pure gold crown of the exact same weight, and thus displace more water. Overjoyed by this revelation, he ran naked through the streets shouting <strong>"Eureka! Eureka!" (I have found it!)</strong>, leading to the formulation of the principle of buoyancy.
+                </p>
+            </div>
+            
+            <!-- 2. ทฤษฎีและสมการหลัก (Principle) -->
+            <div class="glass-panel p-6 rounded-2xl bg-gradient-to-br from-white to-sky-50">
+                <h2 class="text-2xl font-bold text-sky-700 mb-6 flex items-center gap-2">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                    <span data-i18n="concept_title">Archimedes' Core Principle</span>
+                </h2>
+
+                <!-- แผงอธิบายตัวแปร (Variables Definition) -->
+                <div class="bg-white border border-sky-200 p-4 rounded-xl shadow-sm mb-6">
+                    <h3 class="font-bold text-sky-800 mb-2 border-b border-sky-100 pb-1" data-i18n="var_title">Variable Definitions</h3>
+                    <ul class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700">
+                        <li class="flex items-center gap-2"><div class="w-10 text-center font-bold text-sky-600 text-lg bg-sky-50 rounded">\(F_b\)</div> <span data-i18n="var_fb">Buoyant Force (Newtons, N or kg-force)</span></li>
+                        <li class="flex items-center gap-2"><div class="w-10 text-center font-bold text-sky-600 text-lg bg-sky-50 rounded">\(\rho\)</div> <span data-i18n="var_rho">Density of Fluid (\(kg/m^3\))</span></li>
+                        <li class="flex items-center gap-2"><div class="w-10 text-center font-bold text-sky-600 text-lg bg-sky-50 rounded">\(V\)</div> <span data-i18n="var_v">Submerged Volume (\(m^3\))</span></li>
+                        <li class="flex items-center gap-2"><div class="w-10 text-center font-bold text-sky-600 text-lg bg-sky-50 rounded">\(g\)</div> <span data-i18n="var_g">Gravity (\(\approx 9.81 \ m/s^2\))</span></li>
+                    </ul>
+                </div>
+
+                <div class="grid grid-cols-1 gap-6">
+                    <!-- คำอธิบายขนาดของแรงพยุง -->
+                    <div class="bg-white border-2 border-sky-100 p-6 rounded-xl shadow-sm flex flex-col h-full">
+                        <p class="font-bold text-xl mb-3 text-sky-900" data-i18n="concept_rule1">Magnitude of Buoyant Force</p>
+                        <p class="text-base mb-6 text-slate-700" data-i18n="concept_rule1_desc">The Buoyant Force acting on an object is always equal to the <strong>"weight of the fluid displaced by that object."</strong></p>
+                        
+                        <!-- ภาพเวกเตอร์ 2D อธิบายเรื่องน้ำล้น (SVG Illustration with Force Vectors & Legend) -->
+                        <div class="bg-slate-50 rounded-lg p-6 mb-6 flex justify-center items-center border border-slate-200">
+                            <svg viewBox="0 0 350 260" class="svg-illustration max-w-[350px]">
+                                <defs>
+                                    <marker id="arrowhead-blue" markerWidth="8" markerHeight="6" refX="5" refY="3" orient="auto">
+                                      <polygon points="0 0, 8 3, 0 6" fill="#0ea5e9" />
+                                    </marker>
+                                    <marker id="arrowhead-red" markerWidth="8" markerHeight="6" refX="5" refY="3" orient="auto">
+                                      <polygon points="0 0, 8 3, 0 6" fill="#ef4444" />
+                                    </marker>
+                                    <marker id="arrowhead-orange" markerWidth="8" markerHeight="6" refX="5" refY="3" orient="auto">
+                                      <polygon points="0 0, 8 3, 0 6" fill="#f59e0b" />
+                                    </marker>
+                                </defs>
+                                
+                                <!-- Base Tank -->
+                                <path d="M 50 100 L 50 190 L 160 190 L 160 140 L 200 140 L 200 125 L 160 125 L 160 100" fill="none" stroke="#0284c7" stroke-width="3" stroke-linejoin="round"/>
+                                <!-- Tank Water -->
+                                <path d="M 52 125 L 158 125 L 158 188 L 52 188 Z" fill="#38bdf8" opacity="0.6"/>
+                                
+                                <!-- Top Scale (Spring Scale) -->
+                                <rect x="85" y="10" width="40" height="40" rx="5" fill="#64748b"/>
+                                <circle cx="105" cy="30" r="15" fill="white"/>
+                                <!-- Top Scale Needle & Text (Reads 3 kg) -->
+                                <line x1="105" y1="30" x2="112" y2="23" stroke="#ef4444" stroke-width="2"/>
+                                <text x="135" y="35" text-anchor="start" font-size="14" font-weight="bold" fill="#ea580c">3 kg</text>
+                                
+                                <!-- Wire holding object -->
+                                <line x1="105" y1="50" x2="105" y2="105" stroke="#334155" stroke-width="2"/>
+
+                                <!-- Object (2/3 Submerged) -->
+                                <!-- Center of object is roughly X=105, Y=130 -->
+                                <rect x="80" y="105" width="50" height="50" rx="5" fill="#475569"/>
+
+                                <!-- ===== Physics Force Vectors ===== -->
+                                <!-- 1. Weight (W) - Downwards from center -->
+                                <line x1="105" y1="130" x2="105" y2="180" stroke="#ef4444" stroke-width="3" marker-end="url(#arrowhead-red)"/>
+                                <text x="115" y="175" text-anchor="start" font-size="12" font-weight="bold" fill="#dc2626">\(W\)</text>
+                                
+                                <!-- 2. Buoyant Force (Fb) - Upwards from center (offset left) -->
+                                <line x1="90" y1="130" x2="90" y2="90" stroke="#0ea5e9" stroke-width="3" marker-end="url(#arrowhead-blue)"/>
+                                <text x="85" y="85" text-anchor="end" font-size="12" font-weight="bold" fill="#0284c7">\(F_b\)</text>
+
+                                <!-- 3. Apparent Weight / Tension (W_app) - Upwards from center (offset right) -->
+                                <line x1="120" y1="130" x2="120" y2="80" stroke="#f59e0b" stroke-width="3" marker-end="url(#arrowhead-orange)"/>
+                                <text x="125" y="75" text-anchor="start" font-size="12" font-weight="bold" fill="#d97706">\(W_{app}\)</text>
+
+                                <!-- Water Flow -->
+                                <path d="M 160 132 L 205 132 Q 220 132 220 150 L 220 175" fill="none" stroke="#38bdf8" stroke-width="6" marker-end="url(#arrowhead-blue)"/>
+                                
+                                <!-- Beaker -->
+                                <path d="M 195 175 L 195 215 L 245 215 L 245 175" fill="none" stroke="#0284c7" stroke-width="3" stroke-linejoin="round"/>
+                                <rect x="197" y="195" width="46" height="18" fill="#38bdf8" opacity="0.6"/>
+                                
+                                <!-- Bottom Scale Base -->
+                                <rect x="185" y="215" width="70" height="6" fill="#9ca3af" rx="2"/>
+                                <!-- Bottom Scale Body -->
+                                <rect x="195" y="221" width="50" height="30" fill="#64748b" rx="4"/>
+                                <!-- Bottom Scale Screen -->
+                                <rect x="200" y="226" width="40" height="20" fill="#f8fafc" rx="2"/>
+                                <!-- Bottom Scale text -->
+                                <text x="220" y="240" text-anchor="middle" font-size="12" font-weight="bold" fill="#ea580c">2 kg</text>
+
+                                <!-- Legend Panel (Bottom Left) -->
+                                <rect x="5" y="195" width="160" height="60" fill="white" stroke="#cbd5e1" rx="4" />
+                                <text x="10" y="210" font-size="10" fill="#dc2626" font-weight="bold" data-i18n="svg_w">W = Object Weight (5 kg)</text>
+                                <text x="10" y="228" font-size="10" fill="#0284c7" font-weight="bold" data-i18n="svg_fb">Fb = Buoyant Force (2 kg)</text>
+                                <text x="10" y="246" font-size="10" fill="#d97706" font-weight="bold" data-i18n="svg_wapp">W_app = Scale Tension (3 kg)</text>
+                            </svg>
+                        </div>
+                        
+                        <!-- ตัวอย่างคำอธิบายเพิ่มเติม -->
+                        <p class="text-sm mb-4 text-sky-800 bg-sky-50 p-4 rounded-lg border border-sky-100" data-i18n="concept_rule1_exp">
+                            <strong>Example:</strong> A 5 kg object is weighed underwater. The scale reads 3 kg, meaning it lost 2 kg of apparent weight. This 2 kg buoyant force exactly matches the 2 kg of displaced water collected in the beaker.
+                        </p>
+
+                        <!-- สมการหลัก -->
+                        <div class="text-center text-lg font-bold text-sky-800 bg-white py-4 rounded-lg border-2 border-sky-100 shadow-sm">
+                            \( F_b = \rho_{fluid} \cdot V_{sub} \cdot g \)
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== ส่วนแบบจำลอง 3 มิติ (3D Simulation Section) ==================== -->
+        <section class="glass-panel p-6 rounded-2xl shadow-lg border-sky-200 border-2">
+            <h2 class="text-2xl font-bold text-slate-800 mb-2 flex items-center gap-2">
+                <svg class="w-6 h-6 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"></path></svg>
+                <span data-i18n="sim_title">3D Simulation (Archimedes' Principle)</span>
+            </h2>
+            <p class="text-sm text-slate-500 mb-4" data-i18n="sim_desc">Adjust the properties of the fluid and the suspended object. Observe the scale reading and the detailed step-by-step calculations below. (Drag to rotate, scroll to zoom)</p>
+            
+            <div class="grid lg:grid-cols-12 gap-6">
+                <!-- ส่วนแผงควบคุม (Controls) และ ผลการคำนวณ (HUD) -->
+                <div class="lg:col-span-5 space-y-6 flex flex-col h-full">
+                    
+                    <div class="bg-slate-50 p-5 rounded-xl border border-slate-200 space-y-5">
+                        <!-- แถบเลื่อนปรับค่าความหนาแน่นของเหลว -->
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-2">
+                                <span data-i18n="sim_fluid_density">Fluid Density (\(\rho_{fluid}\))</span> <br>
+                                = <span id="fluid-density-val" class="text-sky-600 font-bold text-lg">1000</span> \(kg/m^3\)
+                            </label>
+                            <input type="range" id="fluid-density" min="500" max="2000" value="1000" step="100" class="w-full h-2 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-sky-500">
+                        </div>
+
+                        <!-- แถบเลื่อนปรับขนาดความยาวด้านของวัตถุ (ลูกบาศก์) -->
+                        <div class="pt-2 border-t border-slate-200">
+                            <label class="block text-sm font-semibold text-slate-700 mb-2">
+                                <span data-i18n="sim_obj_length">Object Side Length (\(L\))</span> <br>
+                                = <span id="obj-length-val" class="text-emerald-600 font-bold text-lg">0.50</span> \(m\)
+                            </label>
+                            <input type="range" id="obj-length" min="0.1" max="1.0" value="0.5" step="0.05" class="w-full h-2 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-emerald-500">
+                        </div>
+
+                        <!-- แถบเลื่อนปรับค่าความหนาแน่นวัตถุ -->
+                        <div class="pt-2 border-t border-slate-200">
+                            <label class="block text-sm font-semibold text-slate-700 mb-2">
+                                <span data-i18n="sim_obj_density">Object Density (\(\rho_{obj}\))</span> <br>
+                                = <span id="obj-density-val" class="text-orange-600 font-bold text-lg">2500</span> \(kg/m^3\)
+                            </label>
+                            <input type="range" id="obj-density" min="100" max="3000" value="2500" step="100" class="w-full h-2 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-orange-500">
+                        </div>
+                    </div>
+
+                    <!-- แผงแสดงวิธีคำนวณอย่างละเอียด (Detailed Calculation Panel) -->
+                    <div class="flex-grow p-5 bg-slate-800 rounded-xl shadow-inner border-2 border-slate-700 text-white">
+                        <h4 class="font-bold text-sky-400 mb-4 border-b border-slate-600 pb-2 text-base uppercase tracking-wider" data-i18n="hud_title">Detailed Calculation</h4>
+                        
+                        <div id="sim-calc-hud" class="text-[14px] leading-relaxed font-mono">
+                            <!-- ข้อความจะถูกแทรกเข้ามาผ่าน JavaScript ฟังก์ชัน updateSimulationMath() -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- พื้นที่สำหรับเรนเดอร์ 3D (3D Canvas) -->
+                <div class="lg:col-span-7 relative">
+                    <div id="canvas-container"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== ส่วนโจทย์แบบฝึกหัด (Interactive Examples) ==================== -->
+        <section class="space-y-6">
+            <h2 class="text-3xl font-bold text-slate-800 text-center" data-i18n="ex_title">Interactive Examples</h2>
+            <p class="text-center text-slate-600 max-w-2xl mx-auto" data-i18n="ex_subtitle">Type inside the question text below. The solutions will update automatically.</p>
+
+            <div class="flex flex-col gap-8">
+                
+                <!-- ตัวอย่างที่ 1 -->
+                <div class="glass-panel p-6 rounded-2xl border-l-8 border-l-sky-500 flex flex-col md:flex-row gap-6 items-start">
+                    <div class="flex-grow w-full md:w-2/3">
+                        <h3 class="text-xl font-bold text-slate-800 mb-4" data-i18n="ex1_title">Example 1: Basic Buoyant Force</h3>
+                        
+                        <div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm text-lg text-slate-700 leading-loose">
+                            <span data-i18n="ex1_q1">An object is placed in a fluid and has a submerged volume of</span>
+                            <input type="number" id="ex1-v" value="0.5" step="0.1" oninput="calculateEx1()"> 
+                            <span data-i18n="ex1_q2">\(m^3\). If the fluid has a density of</span>
+                            <input type="number" id="ex1-rho" value="1000" step="10" oninput="calculateEx1()"> 
+                            <span data-i18n="ex1_q3">\(kg/m^3\), calculate the buoyant force acting on the object. (Assume \(g = 9.81 \ m/s^2\))</span>
+                        </div>
+
+                        <div id="ex1-solution" class="flex flex-col gap-2 mt-6">
+                            <h4 class="font-bold text-slate-800 border-b-2 border-slate-200 pb-2 mb-2 text-lg" data-i18n="sol_title">Step-by-step Solution:</h4>
+                            <div id="ex1-steps" class="text-base text-slate-800"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- ภาพประกอบ EX1 -->
+                    <div class="w-full md:w-1/3 flex-shrink-0 flex items-center justify-center p-4 bg-sky-50 rounded-xl border border-sky-100">
+                        <svg viewBox="0 0 150 150" class="svg-illustration max-w-[180px]">
+                            <!-- SVG Content -->
+                            <defs>
+                                <marker id="arrowhead-red2" markerWidth="8" markerHeight="6" refX="5" refY="3" orient="auto">
+                                    <polygon points="0 0, 8 3, 0 6" fill="#ef4444" />
+                                </marker>
+                            </defs>
+                            <rect x="25" y="50" width="100" height="80" fill="none" stroke="#0284c7" stroke-width="4" rx="4"/>
+                            <rect x="27" y="60" width="96" height="68" fill="#38bdf8" opacity="0.5"/>
+                            <rect x="50" y="30" width="50" height="50" fill="#475569" rx="4"/>
+                            <path d="M 25 60 Q 75 65 125 60" fill="none" stroke="#0284c7" stroke-width="2"/>
+                            
+                            <line x1="75" y1="55" x2="75" y2="15" stroke="#0ea5e9" stroke-width="3" marker-end="url(#arrowhead-blue)"/>
+                            <text x="60" y="25" font-size="12" fill="#0284c7" font-weight="bold">\(F_b\)</text>
+                            <line x1="75" y1="55" x2="75" y2="95" stroke="#ef4444" stroke-width="3" marker-end="url(#arrowhead-red2)"/>
+                            <text x="60" y="90" font-size="12" fill="#dc2626" font-weight="bold">\(W\)</text>
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- ตัวอย่างที่ 2 -->
+                <div class="glass-panel p-6 rounded-2xl border-l-8 border-l-orange-500 flex flex-col md:flex-row gap-6 items-start">
+                    <div class="flex-grow w-full md:w-2/3">
+                        <h3 class="text-xl font-bold text-slate-800 mb-4" data-i18n="ex2_title">Example 2: Apparent Weight</h3>
+                        
+                        <div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm text-lg text-slate-700 leading-loose">
+                            <span data-i18n="ex2_q1">A solid iron sphere has a mass of</span>
+                            <input type="number" id="ex2-m" value="50" step="1" oninput="calculateEx2()">
+                            <span data-i18n="ex2_q2">\(kg\) and a total volume of</span>
+                            <input type="number" id="ex2-v" value="0.01" step="0.001" oninput="calculateEx2()">
+                            <span data-i18n="ex2_q3">\(m^3\). It is completely submerged underwater where fluid density is</span>
+                            <input type="number" id="ex2-rho" value="1000" step="10" oninput="calculateEx2()">
+                            <span data-i18n="ex2_q4">\(kg/m^3\). If you weigh it underwater with a spring scale, what will it read? (Find Apparent Weight, \(g = 9.81 \ m/s^2\))</span>
+                        </div>
+
+                        <div id="ex2-solution" class="flex flex-col gap-2 mt-6">
+                            <h4 class="font-bold text-slate-800 border-b-2 border-slate-200 pb-2 mb-2 text-lg" data-i18n="sol_title">Step-by-step Solution:</h4>
+                            <div id="ex2-steps" class="text-base text-slate-800"></div>
+                        </div>
+                    </div>
+
+                    <!-- ภาพประกอบ EX2 -->
+                    <div class="w-full md:w-1/3 flex-shrink-0 flex items-center justify-center p-4 bg-orange-50 rounded-xl border border-orange-100">
+                        <svg viewBox="0 0 150 180" class="svg-illustration max-w-[180px]">
+                            <!-- SVG Content -->
+                            <defs>
+                                <marker id="arrowhead-orange" markerWidth="8" markerHeight="6" refX="5" refY="3" orient="auto">
+                                    <polygon points="0 0, 8 3, 0 6" fill="#f59e0b" />
+                                </marker>
+                            </defs>
+                            <rect x="25" y="70" width="100" height="100" fill="none" stroke="#0284c7" stroke-width="4" rx="4"/>
+                            <rect x="27" y="80" width="96" height="88" fill="#38bdf8" opacity="0.5"/>
+                            <rect x="60" y="10" width="30" height="30" fill="#64748b" rx="4"/>
+                            <circle cx="75" cy="25" r="10" fill="white"/>
+                            <line x1="75" y1="25" x2="80" y2="20" stroke="#ef4444" stroke-width="2"/>
+                            <path d="M 75 40 L 75 60 Q 80 60 80 65 Q 80 70 75 70 Q 70 70 70 65" fill="none" stroke="#475569" stroke-width="2"/>
+                            <line x1="75" y1="70" x2="75" y2="105" stroke="#1e293b" stroke-width="2"/>
+                            <circle cx="75" cy="130" r="25" fill="#475569"/>
+                            
+                            <line x1="60" y1="130" x2="60" y2="95" stroke="#0ea5e9" stroke-width="3" marker-end="url(#arrowhead-blue)"/>
+                            <text x="45" y="105" font-size="12" fill="#0284c7" font-weight="bold">\(F_b\)</text>
+                            <line x1="90" y1="130" x2="90" y2="95" stroke="#f59e0b" stroke-width="3" marker-end="url(#arrowhead-orange)"/>
+                            <text x="115" y="105" font-size="12" fill="#d97706" font-weight="bold">\(W_{app}\)</text>
+                            <line x1="75" y1="130" x2="75" y2="170" stroke="#ef4444" stroke-width="3" marker-end="url(#arrowhead-red2)"/>
+                            <text x="60" y="165" font-size="12" fill="#dc2626" font-weight="bold">\(W\)</text>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ==================== ส่วนท้าย (Footer) ==================== -->
+    <footer class="bg-slate-800 text-slate-400 py-8 mt-8 text-center text-sm border-t-4 border-sky-500">
+        <div class="max-w-4xl mx-auto px-4 flex flex-col items-center gap-3">
+            <p class="text-base" data-i18n="footer_edu">Designed for Education | Interactive Physics Lesson</p>
+            <p class="font-semibold text-slate-200 text-base">Credits: <a href="https://opensimlab.org" target="_blank" class="text-sky-400 hover:text-sky-300 hover:underline">OpenSimLab.org</a></p>
+            <p>Code by <span class="text-slate-900 font-mono bg-sky-300 px-2 py-0.5 rounded shadow-inner font-bold">Gemini</span></p>
+        </div>
+    </footer>
+
+    <!-- ==================== SCRIPT & LOGIC ==================== -->
+    <script>
+        // Setup initial input styling
+        document.querySelectorAll('input[type="number"]').forEach(el => {
+            el.classList.add('inline-input');
+        });
+
+        // --- 1. ระบบจัดการภาษา (Language Switcher) ---
+        // สามารถเพิ่มภาษาอื่น หรือแก้คำแปลต่างๆ ได้ใน Object นี้
+        let currentLang = 'en'; // ตั้งค่าภาษาเริ่มต้นเป็น English
+        
+        const translations = {
+            en: {
+                nav_title: "Physics Lab",
+                main_title: "Buoyant Force & Archimedes' Principle",
+                main_subtitle: "Explore the physics of floating and sinking through interactive simulations and editable examples.",
+                history_title: "The \"Eureka!\" Moment",
+                history_p1: "The story begins when Archimedes, an ancient Greek scholar, was tasked by King Hiero II of Syracuse to determine if a newly crafted golden crown had been adulterated with cheaper silver. The crucial condition was that Archimedes <strong>could not destroy, melt, or damage the crown in any way.</strong> This presented a significant challenge because the crown's irregular shape made calculating its volume by standard mathematics impossible.",
+                history_p2: "One day, while pondering the problem, he stepped into a full bathtub. He noticed that <strong>\"the volume of water that spilled over the edge was exactly equal to the volume of his body that was submerged.\"</strong> In a flash of insight, he realized he could measure the crown's volume by displacing water! If the crown contained silver (which is less dense than gold), it would have a larger volume than a pure gold crown of the exact same weight, and thus displace more water. Overjoyed by this revelation, he ran naked through the streets shouting <strong>\"Eureka! Eureka!\" (I have found it!)</strong>, leading to the formulation of the principle of buoyancy.",
+                concept_title: "Archimedes' Core Principle",
+                var_title: "Variable Definitions",
+                var_fb: "Buoyant Force (Newtons, N)",
+                var_rho: "Density of Fluid (\\(kg/m^3\\))",
+                var_v: "Submerged Volume (\\(m^3\\))",
+                var_g: "Gravity (\\(\\approx 9.81 \\ m/s^2\\))",
+                concept_rule1: "Magnitude of Buoyant Force",
+                concept_rule1_desc: "The Buoyant Force acting on an object is always equal to the <strong>\"weight of the fluid displaced by that object.\"</strong>",
+                svg1_water: "Displaced",
+                svg_w: "W = Object Weight (49.05 N)",
+                svg_fb: "Fb = Buoyant Force (19.62 N)",
+                svg_wapp: "W_app = Apparent Weight (29.43 N)",
+                concept_rule1_exp: "<strong>Example:</strong> A 5 kg object is weighed underwater. The top scale reads 3 kg (apparent mass). The difference is 2 kg, meaning the buoyant force is 19.62 N (2 kg × 9.81). This exactly matches the weight of the displaced water in the beaker.",
+                sim_title: "3D Simulation (Archimedes' Principle)",
+                sim_desc: "Adjust the properties of the fluid and the suspended object. Observe the scale reading and the detailed step-by-step calculations below. (Drag to rotate, scroll to zoom)",
+                sim_obj_length: "Object Side Length (\\(L\\))",
+                sim_obj_density: "Object Density (\\(\\rho_{obj}\\))",
+                sim_fluid_density: "Fluid Density (\\(\\rho_{fluid}\\))",
+                hud_title: "Detailed Calculation",
+                calc_step1: "1. Find Volume & Mass:",
+                calc_step2: "2. State, Vol & Depth (\\(h_{sub}\\)):",
+                calc_float: "Object floats (\\(\\rho_{obj} \\le \\rho_{fluid}\\))",
+                calc_sink: "Object sinks & hangs (\\(\\rho_{obj} > \\rho_{fluid}\\))",
+                calc_step3: "3. Displaced Fluid & \\(F_b\\):",
+                calc_step4: "4. Scale Reading (Apparent Mass):",
+                ex_title: "Interactive Examples",
+                ex_subtitle: "Type inside the question text below. The solutions will update automatically.",
+                ex1_title: "Example 1: Basic Buoyant Force",
+                ex1_q1: "An object is placed in a fluid and has a submerged volume of",
+                ex1_q2: "\\(m^3\\). If the fluid has a density of",
+                ex1_q3: "\\(kg/m^3\\), calculate the buoyant force acting on the object. (Assume \\(g = 9.81 \\ m/s^2\\))",
+                ex2_title: "Example 2: Apparent Weight",
+                ex2_q1: "A solid iron sphere has a mass of",
+                ex2_q2: "\\(kg\\) and a total volume of",
+                ex2_q3: "\\(m^3\\). It is completely submerged underwater where fluid density is",
+                ex2_q4: "\\(kg/m^3\\). If you weigh it underwater with a spring scale, what will it read? (Find Apparent Weight, \\(g = 9.81 \\ m/s^2\\))",
+                sol_title: "Step-by-step Solution:",
+                step_given: "<strong>Step 1: Identify Variables</strong>",
+                step_formula: "<strong>Step 2: Apply Formula</strong>",
+                step_sub: "<strong>Step 3: Calculate</strong>",
+                step2_w: "<strong>Step 1: Find Actual Weight (\\(W\\))</strong>",
+                step2_fb: "<strong>Step 2: Find Buoyant Force (\\(F_b\\))</strong>",
+                step2_app: "<strong>Step 3: Find Apparent Weight</strong>",
+                ans_text: "The buoyant force is",
+                ans_app: "The scale reads (Apparent Weight) =",
+                footer_edu: "Designed for Education | Interactive Physics Lesson"
+            },
+            th: {
+                nav_title: "ห้องทดลองฟิสิกส์",
+                main_title: "แรงพยุงและหลักของอาร์คิมีดีส",
+                main_subtitle: "เรียนรู้ฟิสิกส์ของการลอยและการจมผ่านแบบจำลอง 3D ที่โต้ตอบได้และโจทย์ตัวอย่างที่ปรับแก้ไขตัวเลขได้",
+                history_title: "ช่วงเวลาแห่ง \"ยูเรก้า!\"",
+                history_p1: "เรื่องราวเริ่มต้นขึ้นเมื่อ อาร์คิมีดีส (Archimedes) นักปราชญ์ชาวกรีก ได้รับคำสั่งจากกษัตริย์ฮิเอโรที่ 2 แห่งไซราคิวส์ ให้ตรวจสอบมงกุฎทองคำที่เพิ่งทำเสร็จใหม่ๆ ว่าช่างทำทองได้แอบยักยอกทองคำแล้วผสม \"เงิน\" ซึ่งมีราคาถูกกว่าลงไปหรือไม่ โดยมีข้อแม้สำคัญคือ <strong>ห้ามทำลาย ห้ามหลอม หรือสร้างความเสียหายแก่มงกุฎเด็ดขาด</strong> ปัญหานี้ทำให้อาร์คิมีดีสต้องครุ่นคิดอย่างหนักเพราะมงกุฎมีรูปทรงที่ซับซ้อนมาก ไม่สามารถวัดหาปริมาตรด้วยวิธีทางคณิตศาสตร์ปกติได้",
+                history_p2: "วันหนึ่งขณะที่เขากำลังคิดหาทางออก เขาก้าวลงไปอาบน้ำในอ่างที่น้ำเต็มล้น ทันใดนั้นเขาสังเกตเห็นว่า <strong>\"ระดับน้ำที่ล้นออกมานอกอ่าง มีปริมาตรเท่ากับส่วนของร่างกายเขาที่จมลงไปในน้ำพอดิบพอดี\"</strong> ในวินาทีนั้นเขาตระหนักได้ทันทีว่า เขาสามารถหาปริมาตรของมงกุฎได้โดยการนำไปแทนที่น้ำ! หากมงกุฎมีเงินผสมอยู่ (ซึ่งเงินมีความหนาแน่นน้อยกว่าทอง) มงกุฎนั้นจะมีปริมาตรมากกว่าทองคำแท้ๆ ที่มีน้ำหนักเท่ากัน และจะทำให้น้ำล้นออกมามากกว่า ด้วยความตื่นเต้นสุดขีดกับการค้นพบนี้ เขาวิ่งเปลือยกายออกไปตามถนนพร้อมตะโกนว่า <strong>\"ยูเรก้า! ยูเรก้า!\" (ฉันค้นพบแล้ว!)</strong> ซึ่งนำไปสู่การตั้งกฎเรื่องแรงพยุงในเวลาต่อมา",
+                concept_title: "หลักการสำคัญของอาร์คิมีดีส",
+                var_title: "นิยามตัวแปรที่ใช้",
+                var_fb: "แรงพยุงหรือแรงลอยตัว (นิวตัน, N)",
+                var_rho: "ความหนาแน่นของเหลว (\\(kg/m^3\\))",
+                var_v: "ปริมาตรส่วนที่จม (\\(m^3\\))",
+                var_g: "ความเร่งจากแรงโน้มถ่วง (\\(\\approx 9.81 \\ m/s^2\\))",
+                concept_rule1: "ขนาดของแรงพยุง",
+                concept_rule1_desc: "แรงพยุง (Buoyant Force) ที่กระทำต่อวัตถุ จะมีค่าเท่ากับ <strong>\"น้ำหนักของของเหลวที่ถูกวัตถุนั้นแทนที่\"</strong> เสมอ",
+                svg1_water: "น้ำที่ล้นออกมา",
+                svg_w: "W = น้ำหนักวัตถุ (49.05 N)",
+                svg_fb: "Fb = แรงพยุง (19.62 N)",
+                svg_wapp: "W_app = น้ำหนักปรากฏ (29.43 N)",
+                concept_rule1_exp: "<strong>ตัวอย่างจากภาพ:</strong> วัตถุมวล 5 kg แขวนด้วยตาชั่งสปริงในน้ำ ตาชั่งอ่านค่าได้ 3 kg แสดงว่ามวลปรากฏหายไป 2 kg น้ำหนักที่หายไปนี้คือแรงพยุงขนาด 19.62 N (2 kg × 9.81) ซึ่งจะไปเท่ากับน้ำหนักของน้ำที่ล้นออกมาในบีกเกอร์พอดี",
+                sim_title: "แบบจำลอง 3D (หลักการอาร์คิมีดีส)",
+                sim_desc: "ปรับค่าความหนาแน่นและขนาดของวัตถุที่ถูกแขวน สังเกตการเปลี่ยนแปลงของตาชั่งและดูวิธีคำนวณอย่างละเอียดด้านล่าง (คลิกค้างเพื่อหมุน, เลื่อนลูกกลิ้งเมาส์เพื่อซูม)",
+                sim_obj_length: "ความยาวด้านของวัตถุ (\\(L\\))",
+                sim_obj_density: "ความหนาแน่นวัตถุ (\\(\\rho_{obj}\\))",
+                sim_fluid_density: "ความหนาแน่นของเหลว (\\(\\rho_{fluid}\\))",
+                hud_title: "วิธีคำนวณอย่างละเอียด",
+                calc_step1: "1. หาปริมาตรและมวลของวัตถุ:",
+                calc_step2: "2. สถานะ, ปริมาตรและความลึกที่จม (\\(h_{sub}\\)):",
+                calc_float: "วัตถุลอย (\\(\\rho_{obj} \\le \\rho_{fluid}\\))",
+                calc_sink: "วัตถุจมและถูกแขวน (\\(\\rho_{obj} > \\rho_{fluid}\\))",
+                calc_step3: "3. มวลน้ำที่แทนที่ และ \\(F_b\\):",
+                calc_step4: "4. ค่าที่อ่านได้บนตาชั่ง (มวลปรากฏ):",
+                ex_title: "โจทย์แบบฝึกหัด (Interactive)",
+                ex_subtitle: "พิมพ์เปลี่ยนตัวเลขในโจทย์ด้านล่างได้เลย วิธีทำและเฉลยจะอัปเดตให้โดยอัตโนมัติทันที",
+                ex1_title: "ข้อที่ 1: การคำนวณแรงพยุงเบื้องต้น",
+                ex1_q1: "วัตถุก้อนหนึ่งถูกนำไปลอยในของเหลว พบว่ามีปริมาตรส่วนที่จมอยู่ในของเหลวเท่ากับ",
+                ex1_q2: "\\(m^3\\) ถ้าน้ำหรือของเหลวชนิดนี้มีความหนาแน่นเท่ากับ",
+                ex1_q3: "\\(kg/m^3\\) จงคำนวณหาแรงพยุงที่กระทำต่อวัตถุนี้ (กำหนดให้ \\(g = 9.81 \\ m/s^2\\))",
+                ex2_title: "ข้อที่ 2: น้ำหนักที่หายไป (น้ำหนักปรากฏ)",
+                ex2_q1: "ทรงกลมเหล็กตันก้อนหนึ่งมีมวล",
+                ex2_q2: "\\(kg\\) และมีปริมาตรรวมทั้งก้อนเท่ากับ",
+                ex2_q3: "\\(m^3\\) ถูกนำไปจมมิดอยู่ใต้ผิวน้ำที่มีความหนาแน่น",
+                ex2_q4: "\\(kg/m^3\\) ถ้านำตาชั่งสปริงไปดึงทรงกลมนี้ใต้น้ำ จะอ่านค่าได้กี่นิวตัน? (หาน้ำหนักปรากฏ กำหนด \\(g = 9.81 \\ m/s^2\\))",
+                sol_title: "วิธีทำอย่างละเอียด:",
+                step_given: "<strong>ขั้นที่ 1: กำหนดค่าตัวแปร</strong>",
+                step_formula: "<strong>ขั้นที่ 2: ใช้สูตรแรงพยุง</strong>",
+                step_sub: "<strong>ขั้นที่ 3: แทนค่าคำนวณ</strong>",
+                step2_w: "<strong>ขั้นที่ 1: หาน้ำหนักจริง (\\(W\\))</strong>",
+                step2_fb: "<strong>ขั้นที่ 2: หาแรงพยุง (\\(F_b\\))</strong>",
+                step2_app: "<strong>ขั้นที่ 3: หาน้ำหนักปรากฏใต้น้ำ</strong>",
+                ans_text: "แรงพยุงมีค่าเท่ากับ",
+                ans_app: "ตาชั่งสปริงอ่านค่าได้ (น้ำหนักปรากฏ) =",
+                footer_edu: "ออกแบบเพื่อการศึกษา | Interactive Physics Lesson"
+            }
+        };
+
+        // ฟังก์ชันสลับการแสดงผลภาษา
+        function toggleLanguage() {
+            currentLang = currentLang === 'en' ? 'th' : 'en';
+            
+            const btnEn = document.getElementById('btn-en');
+            const btnTh = document.getElementById('btn-th');
+            
+            if(currentLang === 'en') {
+                btnEn.className = 'lang-btn active';
+                btnTh.className = 'lang-btn inactive';
+            } else {
+                btnEn.className = 'lang-btn inactive';
+                btnTh.className = 'lang-btn active';
+            }
+
+            // แทนที่ข้อความตาม data-i18n attributes
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (translations[currentLang][key]) {
+                    el.innerHTML = translations[currentLang][key];
+                }
+            });
+
+            // Re-render สมการ MathJax ให้ถูกต้องหลังจากเปลี่ยนภาษา
+            if(window.MathJax) MathJax.typesetPromise();
+            
+            // สั่งอัปเดต Simulation และ โจทย์ตัวอย่าง เพื่ออัปเดตคำแปลด้านใน
+            updateSimulationMath();
+            calculateEx1();
+            calculateEx2();
+        }
+
+        // ฟังก์ชันดึงค่าแปลภาษา
+        function getT(key) {
+            return translations[currentLang][key] || key;
+        }
+
+        // --- 2. ระบบจำลอง 3 มิติ (Three.js 3D Simulation) ---
+        let scene, camera, renderer, objectCube, wireLine, scaleSprite;
+        let arrowW, arrowFb, arrowWapp;
+        let labelW, labelFb, labelWapp;
+        
+        let objDensityInput = document.getElementById('obj-density');
+        let objLengthInput = document.getElementById('obj-length');
+        let fluidDensityInput = document.getElementById('fluid-density');
+        
+        let targetY = 0;
+        let time = 0;
+        let isFloating = false;
+
+        // การสร้างฉาก (Scene) และวัตถุตั้งต้น
+        function init3D() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf8fafc); 
+
+            // Camera is pulled back to see the scale and the tank clearly
+            camera = new THREE.PerspectiveCamera(40, container.clientWidth / container.clientHeight, 0.1, 100);
+            camera.position.set(0, 4, 15); 
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.minDistance = 4;
+            controls.maxDistance = 25;
+            controls.target.set(0, 2.5, 0);
+
+            // Lighting (การจัดแสงสว่าง)
+            scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+            dirLight.position.set(5, 10, 5);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+
+            const mainGroup = new THREE.Group();
+            
+            // 1. ถังใส่น้ำ (Tank)
+            const tankGeo = new THREE.CylinderGeometry(1.5, 1.5, 2.5, 32);
+            const tankMat = new THREE.MeshPhysicalMaterial({ 
+                color: 0xbae6fd, 
+                transmission: 0.2, 
+                opacity: 0.4, 
+                transparent: true, 
+                roughness: 0.1, 
+                side: THREE.DoubleSide
+            });
+            const tank = new THREE.Mesh(tankGeo, tankMat);
+            tank.position.set(0, 1.25, 0);
+            mainGroup.add(tank);
+
+            // เส้นขอบ (Edges) เพื่อให้เห็นขอบถังน้ำชัดเจนขึ้น
+            const tankEdges = new THREE.EdgesGeometry(tankGeo);
+            const tankLine = new THREE.LineSegments(tankEdges, new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 }));
+            tank.add(tankLine);
+
+            // 2. ปริมาตรน้ำในถัง (Liquid)
+            const waterGeo = new THREE.CylinderGeometry(1.48, 1.48, 2.45, 32);
+            const waterMat = new THREE.MeshPhysicalMaterial({ 
+                color: 0x0ea5e9, transparent: true, opacity: 0.65 
+            });
+            const water = new THREE.Mesh(waterGeo, waterMat);
+            water.position.set(0, 1.225, 0);
+            mainGroup.add(water);
+
+            // 3. วัตถุทรงลูกบาศก์ที่แขวนอยู่ (Object Cube)
+            const objGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+            const objMat = new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.4 });
+            objectCube = new THREE.Mesh(objGeo, objMat);
+            objectCube.castShadow = true;
+            objectCube.position.set(0, 2.5, 0);
+            
+            const objEdges = new THREE.EdgesGeometry(objGeo);
+            const objLine = new THREE.LineSegments(objEdges, new THREE.LineBasicMaterial({ color: 0x7c2d12 }));
+            objectCube.add(objLine);
+            
+            // --- ใส่เวกเตอร์แรงเข้าไปในวัตถุ (Force Vectors) ---
+            // ปรับสีลูกศรให้เข้มขึ้นเล็กน้อย เพื่อให้อ่านง่าย
+            arrowW = new THREE.ArrowHelper(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0,0,0), 1, 0xdc2626, 0.2, 0.15);
+            arrowFb = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0,0,0), 1, 0x0284c7, 0.2, 0.15);
+            arrowWapp = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0,0,0), 1, 0xd97706, 0.2, 0.15);
+            
+            objectCube.add(arrowW);
+            objectCube.add(arrowFb);
+            objectCube.add(arrowWapp);
+
+            // ป้ายกำกับแรง (Labels for vectors) ส่งค่าสีที่เข้มขึ้นไปแสดงผล
+            labelW = createForceLabel("W", "#dc2626");
+            labelFb = createForceLabel("Fb", "#0284c7");
+            labelWapp = createForceLabel("Wapp", "#d97706");
+            
+            objectCube.add(labelW);
+            objectCube.add(labelFb);
+            objectCube.add(labelWapp);
+
+            mainGroup.add(objectCube);
+
+            // 4. โครงสร้างตาชั่งสปริง (Spring Scale Assembly)
+            const scaleGeo = new THREE.BoxGeometry(1.2, 0.6, 0.6);
+            const scaleMat = new THREE.MeshStandardMaterial({ color: 0x334155 });
+            const scaleBase = new THREE.Mesh(scaleGeo, scaleMat);
+            scaleBase.position.set(0, 4.5, 0);
+            mainGroup.add(scaleBase);
+
+            const hookGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.3);
+            const hook = new THREE.Mesh(hookGeo, new THREE.MeshStandardMaterial({ color: 0x1e293b }));
+            hook.position.set(0, 4.05, 0);
+            mainGroup.add(hook);
+
+            // 5. เส้นลวดเชื่อมระหว่างตาชั่งและวัตถุ (Wire Line)
+            const wireMat = new THREE.LineBasicMaterial({ color: 0x1e293b, linewidth: 2 });
+            const wireGeo = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, 4.05, 0),
+                new THREE.Vector3(0, 2.5, 0) 
+            ]);
+            wireLine = new THREE.Line(wireGeo, wireMat);
+            mainGroup.add(wireLine);
+
+            scene.add(mainGroup);
+
+            // 6. หน้าจอแสดงผลตัวเลขน้ำหนักของตาชั่ง (Scale Digital Reading Sprite)
+            scaleSprite = createTextSprite("0.00 kg");
+            scaleSprite.position.set(0, 5.2, 0); 
+            scene.add(scaleSprite);
+
+            // พื้นหลังตาราง (Ground grid)
+            const gridHelper = new THREE.GridHelper(15, 15, 0x94a3b8, 0xcbd5e1);
+            scene.add(gridHelper);
+
+            window.addEventListener('resize', onWindowResize, false);
+            
+            // เริ่มต้นการคำนวณและการอนิเมชันครั้งแรก
+            updateSimulationMath();
+            animate();
+        }
+
+        // ฟังก์ชันสร้างป้าย Sprite (ข้อความลอย) สำหรับหน้าจอตาชั่ง
+        function createTextSprite(message) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512; 
+            canvas.height = 160; 
+            const context = canvas.getContext('2d');
+            
+            // LED Screen Background
+            context.fillStyle = '#0f172a'; // slate-900
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.strokeStyle = '#475569'; // slate-600
+            context.lineWidth = 12;
+            context.strokeRect(0, 0, canvas.width, canvas.height);
+
+            // Text Setup
+            context.font = 'bold 86px Prompt, sans-serif';
+            context.fillStyle = '#22c55e'; // Bright digital green (emerald-500)
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(message, canvas.width / 2, canvas.height / 2 + 5);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            // Size of the sprite in the 3D scene (Made larger)
+            sprite.scale.set(2.0, 0.625, 1); 
+            return sprite;
+        }
+
+        function updateScaleSpriteText(sprite, message) {
+            if(!sprite) return;
+            const canvas = sprite.material.map.image;
+            const context = canvas.getContext('2d');
+            context.fillStyle = '#0f172a';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.strokeStyle = '#475569';
+            context.strokeRect(0, 0, canvas.width, canvas.height);
+            context.font = 'bold 86px Prompt, sans-serif';
+            context.fillStyle = '#22c55e';
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(message, canvas.width / 2, canvas.height / 2 + 5);
+            sprite.material.map.needsUpdate = true;
+        }
+
+        // ฟังก์ชันสร้างป้ายกำกับแรง (Force Labels)
+        function createForceLabel(text, colorStr) {
+            const canvas = document.createElement('canvas');
+            // ขยายขนาด Canvas ให้กว้างขึ้นเพื่อป้องกันตัวเลขแหว่ง
+            canvas.width = 512;
+            canvas.height = 128;
+            const context = canvas.getContext('2d');
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMat = new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true });
+            const sprite = new THREE.Sprite(spriteMat);
+            // ปรับขนาด Scale ให้เหมาะสมกับความกว้างใหม่
+            sprite.scale.set(3.0, 0.75, 1);
+            sprite.renderOrder = 999; // ให้อยู่หน้าสุดเสมอ
+            
+            sprite.userData = { color: colorStr }; // เก็บสีไว้ใช้อัปเดต
+            return sprite;
+        }
+
+        function updateForceLabel(sprite, text) {
+            if(!sprite) return;
+            const canvas = sprite.material.map.image;
+            const context = canvas.getContext('2d');
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            
+            context.font = 'bold 44px Prompt, sans-serif';
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            
+            // หาขนาดความกว้างของข้อความ เพื่อวาดกล่องพื้นหลัง
+            const textMetrics = context.measureText(text);
+            const textWidth = textMetrics.width;
+            const paddingX = 30;
+            const paddingY = 20;
+            
+            const rectW = textWidth + (paddingX * 2);
+            const rectH = 44 + (paddingY * 2);
+            const rectX = (canvas.width / 2) - (rectW / 2);
+            const rectY = (canvas.height / 2) - (rectH / 2);
+
+            // สร้างพื้นหลังสีขาวขอบมน (Pill background) เพื่อให้ตัวอักษรอ่านง่ายเมื่อทับกับน้ำ
+            context.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            context.beginPath();
+            if (context.roundRect) {
+                context.roundRect(rectX, rectY, rectW, rectH, 15);
+            } else {
+                context.rect(rectX, rectY, rectW, rectH);
+            }
+            context.fill();
+            context.lineWidth = 4;
+            context.strokeStyle = sprite.userData.color;
+            context.stroke();
+            
+            // วาดตัวหนังสือลงไป
+            context.fillStyle = sprite.userData.color;
+            context.fillText(text, canvas.width / 2, canvas.height / 2 + 3);
+            
+            sprite.material.map.needsUpdate = true;
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        // คำนวณค่าทางฟิสิกส์ (เปลี่ยนสูตรหรือเพิ่มตัวแปรได้ที่นี่)
+        function updateSimulationMath() {
+            const rho_obj = parseFloat(objDensityInput.value);
+            const rho_fluid = parseFloat(fluidDensityInput.value);
+            const L = parseFloat(objLengthInput.value);
+            
+            document.getElementById('obj-density-val').textContent = rho_obj;
+            document.getElementById('fluid-density-val').textContent = rho_fluid;
+            document.getElementById('obj-length-val').textContent = L.toFixed(2);
+
+            // คำนวณปริมาตรและมวลของวัตถุ
+            const V_obj = Math.pow(L, 3); 
+            const M_obj = rho_obj * V_obj; 
+            const A_base = L * L; 
+            
+            let V_sub = 0;
+            isFloating = rho_obj <= rho_fluid; // ถ้าน้อยกว่าหรือเท่ากับ แสดงว่าวัตถุลอย
+            let scaleReadingMass = 0;
+            let h_sub = 0;
+
+            // ตรรกะของฟิสิกส์ เรื่องแรงพยุง
+            if (isFloating) {
+                V_sub = M_obj / rho_fluid;
+                scaleReadingMass = 0; // ลอยน้ำ ไม่ต้องใช้ตาชั่งดึง น้ำหนักเป็น 0
+                h_sub = V_sub / A_base; // ความลึกส่วนที่จม
+            } else {
+                V_sub = V_obj; // จมมิดก้อน
+                scaleReadingMass = M_obj - (rho_fluid * V_sub); // มวลที่หักล้างด้วยแรงพยุง (มวลปรากฏ)
+                h_sub = L; 
+            }
+
+            const displacedMass = rho_fluid * V_sub;
+            const Fb = displacedMass * 9.81;
+
+            // --- 3D Scene Updates ---
+            if(objectCube) {
+                // Resize รูปทรงลูกบาศก์ให้ตรงตามค่า Slider
+                objectCube.geometry.dispose();
+                objectCube.geometry = new THREE.BoxGeometry(L, L, L);
+                
+                // สร้างเส้นขอบใหม่
+                objectCube.children.forEach(child => { if(child.isLineSegments) objectCube.remove(child); });
+                const objEdges = new THREE.EdgesGeometry(objectCube.geometry);
+                const objLine = new THREE.LineSegments(objEdges, new THREE.LineBasicMaterial({ color: 0x7c2d12 }));
+                objectCube.add(objLine);
+
+                // ระดับน้ำ Y = 2.45
+                const waterSurfaceY = 2.45;
+                
+                if (isFloating) {
+                    targetY = waterSurfaceY - h_sub + (L / 2);
+                } else {
+                    // หากจม จะแขวนเชือกค้างไว้กลางน้ำ 
+                    targetY = 1.2;
+                }
+
+                // --- ควบคุมแผนภาพเวกเตอร์ (Force Diagrams) ---
+                const baseLen = 1.8; // ความยาวพื้นฐานที่สวยงามสำหรับหน้าจอ
+                const lenW = baseLen;
+                const lenFb = baseLen * (displacedMass / M_obj);
+                const lenWapp = baseLen * (scaleReadingMass / M_obj);
+                const offset = (L / 2) + 0.2; // ระยะห่างจากศูนย์กลาง
+
+                arrowW.position.set(0, 0, 0);
+                arrowFb.position.set(-offset, 0, 0);
+                arrowWapp.position.set(offset, 0, 0);
+
+                // อัปเดตความยาวเวกเตอร์
+                arrowW.setLength(lenW, 0.2, 0.15);
+                if (lenFb > 0.05) {
+                    arrowFb.visible = true;
+                    arrowFb.setLength(lenFb, 0.2, 0.15);
+                } else { arrowFb.visible = false; }
+                
+                if (lenWapp > 0.05) {
+                    arrowWapp.visible = true;
+                    arrowWapp.setLength(lenWapp, 0.2, 0.15);
+                } else { arrowWapp.visible = false; }
+
+                // คำนวณแรงเป็นนิวตัน (Force in Newtons)
+                const W_force = M_obj * 9.81;
+                const Fb_force = displacedMass * 9.81;
+                const Wapp_force = scaleReadingMass * 9.81;
+
+                // อัปเดตป้ายตัวหนังสือให้เป็นหน่วย N (Newtons)
+                updateForceLabel(labelW, `W = ${W_force.toFixed(1)} N`);
+                updateForceLabel(labelFb, `Fb = ${Fb_force.toFixed(1)} N`);
+                updateForceLabel(labelWapp, `Wapp = ${Wapp_force.toFixed(1)} N`);
+
+                // จัดตำแหน่งป้ายให้อยู่ปลายลูกศร และขยับออกห่างขึ้นอีกเล็กน้อยไม่ให้ทับวัตถุ
+                labelW.position.set(0.9, -lenW / 2, 0);
+                labelFb.position.set(-offset - 1.1, lenFb / 2, 0);
+                labelWapp.position.set(offset + 1.1, lenWapp / 2, 0);
+            }
+
+            // อัปเดตตัวเลขหน้าตาชั่ง (ตาชั่งปกติยังคงแสดงมวลเป็น kg)
+            updateScaleSpriteText(scaleSprite, scaleReadingMass.toFixed(2) + " kg");
+
+            // --- อัปเดตแผงแสดงวิธีคำนวณอย่างละเอียด (Detailed HUD) ---
+            const calcHTML = `
+                <div class="space-y-5">
+                    <div>
+                        <span class="font-bold text-sky-300 text-[15px]">${getT('calc_step1')}</span><br>
+                        \\(V_{obj} = L^3 = ${L.toFixed(2)}^3 = ${V_obj.toFixed(4)} \\ m^3\\)<br>
+                        \\(M_{obj} = \\rho_{obj} \\cdot V_{obj} = ${rho_obj} \\times ${V_obj.toFixed(4)} = ${M_obj.toFixed(2)} \\ kg\\)
+                    </div>
+                    <div>
+                        <span class="font-bold text-sky-300 text-[15px]">${getT('calc_step2')}</span><br>
+                        <span class="text-slate-300 italic">${isFloating ? getT('calc_float') : getT('calc_sink')}</span><br>
+                        \\(V_{sub} = ${V_sub.toFixed(4)} \\ m^3\\)<br>
+                        <span class="text-emerald-300">\\(h_{sub} = \\frac{V_{sub}}{L^2} = \\frac{${V_sub.toFixed(4)}}{${A_base.toFixed(4)}} = ${h_sub.toFixed(3)} \\ m\\)</span>
+                    </div>
+                    <div>
+                        <span class="font-bold text-sky-300 text-[15px]">${getT('calc_step3')}</span><br>
+                        \\(M_{disp} = \\rho_{fluid} \\cdot V_{sub} = ${rho_fluid} \\times ${V_sub.toFixed(4)} = ${displacedMass.toFixed(2)} \\ kg\\)<br>
+                        \\(F_b = M_{disp} \\cdot g = ${displacedMass.toFixed(2)} \\times 9.81 = ${Fb.toFixed(2)} \\ N\\)
+                    </div>
+                    <div class="border-t border-slate-600 pt-3">
+                        <span class="font-bold text-sky-300 text-[15px]">${getT('calc_step4')}</span><br>
+                        \\(M_{app} = M_{obj} - M_{disp} = ${M_obj.toFixed(2)} - ${displacedMass.toFixed(2)}\\)<br>
+                        <div class="text-emerald-400 font-bold text-[18px] mt-2 bg-slate-900 inline-block px-4 py-1.5 rounded-lg border border-slate-600">Scale = ${scaleReadingMass.toFixed(2)} kg</div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('sim-calc-hud').innerHTML = calcHTML;
+            // ประมวลผลสมการ LaTeX ใน Panel ใหม่
+            if(window.MathJax) MathJax.typesetPromise([document.getElementById('sim-calc-hud')]);
+        }
+
+        // จับตาดูเมื่อมีการเลื่อน Slider
+        objDensityInput.addEventListener('input', updateSimulationMath);
+        fluidDensityInput.addEventListener('input', updateSimulationMath);
+        objLengthInput.addEventListener('input', updateSimulationMath);
+
+        // การควบคุมการเคลื่อนไหว Animation (Render Loop)
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if(objectCube) {
+                // แอนิเมชันให้วัตถุลอยกระเพื่อมเบาๆ 
+                if (isFloating) {
+                    time += 0.04;
+                    const bob = Math.sin(time) * 0.03;
+                    objectCube.position.y += ((targetY + bob) - objectCube.position.y) * 0.1;
+                } else {
+                    objectCube.position.y += (targetY - objectCube.position.y) * 0.15;
+                }
+
+                // อัปเดตความยาวเชือก/ลวด ให้เชื่อมต่อกันแบบ Dynamic
+                if (wireLine) {
+                    const L = parseFloat(objLengthInput.value);
+                    const positions = wireLine.geometry.attributes.position.array;
+                    positions[1] = 4.05; // ด้านบนของเชือกติดกับขอเกี่ยวตาชั่ง (Y=4.05)
+                    positions[4] = objectCube.position.y + (L / 2); // ด้านล่างผูกกับบนสุดของวัตถุ
+                    wireLine.geometry.attributes.position.needsUpdate = true;
+                    
+                    // ถ้ายกขึ้นมา (ลอย) เชือกจะหย่อนเป็นสีเทา ถ้าโดนดึงตึง (จม) เชือกจะเป็นสีเข้ม
+                    wireLine.material.color.setHex(isFloating ? 0x94a3b8 : 0x1e293b);
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // --- 3. การคำนวณโจทย์ตัวอย่าง (Interactive Examples) ---
+        const g = 9.81;
+
+        // คำนวณและแสดงวิธีทำโจทย์ข้อ 1
+        function calculateEx1() {
+            const v = parseFloat(document.getElementById('ex1-v').value) || 0;
+            const rho = parseFloat(document.getElementById('ex1-rho').value) || 0;
+            const fb = rho * v * g;
+
+            const html = `
+                <div class="solution-step">
+                    ${getT('step_given')}<br>
+                    \\(V_{sub} = ${v} \\ m^3\\) <br>
+                    \\(\\rho = ${rho} \\ kg/m^3\\) <br>
+                    \\(g = 9.81 \\ m/s^2\\)
+                </div>
+                <div class="solution-step">
+                    ${getT('step_formula')}<br>
+                    \\[ F_b = \\rho \\cdot V_{sub} \\cdot g \\]
+                </div>
+                <div class="solution-step bg-sky-50 border-sky-400">
+                    ${getT('step_sub')}<br>
+                    \\[ F_b = ${rho} \\times ${v} \\times 9.81 = ${fb.toFixed(2)} \\ N \\]
+                    <div class="text-sky-700 font-bold mt-2">✨ ${getT('ans_text')} ${fb.toFixed(2)} N.</div>
+                </div>
+            `;
+
+            document.getElementById('ex1-steps').innerHTML = html;
+            if(window.MathJax) MathJax.typesetPromise([document.getElementById('ex1-steps')]).catch(err => console.log(err));
+        }
+
+        // คำนวณและแสดงวิธีทำโจทย์ข้อ 2
+        function calculateEx2() {
+            const m = parseFloat(document.getElementById('ex2-m').value) || 0;
+            const v = parseFloat(document.getElementById('ex2-v').value) || 0;
+            const rho = parseFloat(document.getElementById('ex2-rho').value) || 0;
+            
+            const weight = m * g;
+            const fb = rho * v * g;
+            const apparentW = weight - fb;
+            let finalRes = apparentW < 0 ? 0 : apparentW; 
+            
+            const html = `
+                <div class="solution-step">
+                    ${getT('step2_w')}<br>
+                    \\[ W = m \\cdot g = ${m} \\times 9.81 = ${weight.toFixed(2)} \\ N \\]
+                </div>
+                <div class="solution-step">
+                    ${getT('step2_fb')}<br>
+                    \\[ F_b = \\rho \\cdot V \\cdot g = ${rho} \\times ${v} \\times 9.81 = ${fb.toFixed(2)} \\ N \\]
+                </div>
+                <div class="solution-step bg-orange-50 border-orange-400">
+                    ${getT('step2_app')}<br>
+                    \\[ W_{app} = W - F_b \\]<br>
+                    \\[ W_{app} = ${weight.toFixed(2)} - ${fb.toFixed(2)} = ${apparentW.toFixed(2)} \\ N \\]
+                    <div class="text-orange-700 font-bold mt-2">✨ ${getT('ans_app')} ${finalRes.toFixed(2)} N.</div>
+                </div>
+            `;
+
+            document.getElementById('ex2-steps').innerHTML = html;
+            if(window.MathJax) MathJax.typesetPromise([document.getElementById('ex2-steps')]).catch(err => console.log(err));
+        }
+
+        // ---------------- เริ่มทำงานเมื่อโหลดหน้าเว็บ ----------------
+        window.onload = function() {
+            init3D();
+            
+            // รอดีเลย์สั้นๆ เพื่อให้มั่นใจว่า Fonts และไลบรารีต่างๆ พร้อมทำงาน
+            setTimeout(() => {
+                updateSimulationMath();
+                calculateEx1();
+                calculateEx2();
+                if(window.MathJax) MathJax.typesetPromise();
+            }, 100);
+        };
+    </script>
+</body>
+</html>
